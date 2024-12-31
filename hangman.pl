@@ -4,11 +4,13 @@ use Term::ReadKey;
 use Storable;
 use Term::ANSIColor;
 
-my @words = ('perl', 'programming', 'language', 'hangman', 'game');
-my $word = $words[int(rand(@words))];
-my $secretWord = '_' x length($word);
-my $attempts = 6;
+my @words = ('otorinolaringologija', 'programming', 'languages', 'hangman', 'cedevita');
+my $word;
+my $secretWord;
+my $attempts;
 my @guessedLetters;
+my $scoreboard = {};
+my $currentPlayer = "";
 
 #   o
 #  /|\
@@ -27,45 +29,46 @@ sub printHangman {
 
     if ($wrongGuesses == 1) {
         $hangman =  "   +---+\n";
-        $hangman .= "   O   |\n";
+        $hangman .= "   ".colored("O", "yellow")."   |\n";
         $hangman .= "       |\n";
         $hangman .= "       |\n";
         $hangman .= "      ===\n";
     } elsif ($wrongGuesses == 2) {
         $hangman =  "   +---+\n";
-        $hangman .= "   O   |\n";
-        $hangman .= "   |   |\n";
+        $hangman .= "   ".colored("O", "yellow")."   |\n";
+        $hangman .= "   ".colored("|", "bright_cyan")."   |\n";
         $hangman .= "       |\n";
         $hangman .= "      ===\n";
     } elsif ($wrongGuesses == 3) {
         $hangman =  "   +---+\n";
-        $hangman .= "   O   |\n";
-        $hangman .= "   |\\  |\n"; # zbog escaping \, imamo ovu izbocinu
+        $hangman .= "   ".colored("O", "yellow")."   |\n";
+        $hangman .= "   ".colored("|\\", "bright_cyan")."  |\n"; # zbog escaping \, imamo ovu izbocinu
         $hangman .= "       |\n";
         $hangman .= "      ===\n";
     } elsif ($wrongGuesses == 4) {
         $hangman =  "   +---+\n";
-        $hangman .= "   O   |\n";
-        $hangman .= "  /|\\  |\n";
+        $hangman .= "   ".colored("O", "yellow")."   |\n";
+        $hangman .= "  ".colored("/|\\", "bright_cyan")."  |\n";
         $hangman .= "       |\n";
         $hangman .= "      ===\n";
     } elsif ($wrongGuesses == 5) {
         $hangman =  "   +---+\n";
-        $hangman .= "   O   |\n";
-        $hangman .= "  /|\\  |\n";
-        $hangman .= "    \\  |\n";
+        $hangman .= "   ".colored("O", "yellow")."   |\n";
+        $hangman .= "  ".colored("/|\\", "bright_cyan")."  |\n";
+        $hangman .= "    ".colored("\\", "cyan")."  |\n";
         $hangman .= "      ===\n";
     } elsif ($wrongGuesses >= 6) {
         $hangman =  "   +---+\n";
-        $hangman .= "   O   |\n";
-        $hangman .= "  /|\\  |\n";
-        $hangman .= "  / \\  |\n";
+        $hangman .= "   ".colored("O", "yellow")."   |\n";
+        $hangman .= "  ".colored("/|\\", "bright_cyan")."  |\n";
+        $hangman .= "  ".colored("/ \\", "cyan")."  |\n";
         $hangman .= "      ===\n";
     }
     print "\n";
     print $hangman;
     print "\n";
 }
+
 
 # Save the state of the currently played game
 sub saveGame {
@@ -94,27 +97,45 @@ sub loadGame {
 
 # Save the scoreboard to a .sav file
 sub saveScoreboard {
-   # TODO
+    my ($filename) = @_;
+    store({
+        scoreboard => $scoreboard
+    }, $filename);
+    print "Scoreboard saved\n";
 }
 
 # Load the saved scoreboard from the scoreboard.sav file
 sub loadScoreboard {
-   # TODO
+    my ($filename) = @_;
+    my $state = retrieve($filename);
+    $scoreboard = $state->{scoreboard};
+    print "Scoreboard loaded\n";
 }
 
 # Locally update scoreboard after the end of each game
 sub updateScoreboard {
-   # TODO
+    my ($player, $won) = @_;
+    if (!exists $scoreboard->{$player}) {
+        $scoreboard->{$player} = { gamesPlayed => 0, gamesWon => 0 };
+    }
+    $scoreboard->{$player}->{gamesPlayed}++;
+    $scoreboard->{$player}->{gamesWon}++ if $won;
 }
 
 # Display the scoreboard 
 sub viewScoreboard {
-    # TODO
+    print colored("\n~~~ Scoreboard ~~~\n", "yellow");
+    foreach my $player (keys %$scoreboard) {
+        print "$player: Games Played: $scoreboard->{$player}->{gamesPlayed}, Games Won: $scoreboard->{$player}->{gamesWon}\n";
+    }
 }
 
 # Display the score of the current player after winning a game
 sub displayScore {
-    # TODO
+    my $gamesPlayed = $scoreboard->{$currentPlayer}->{gamesPlayed};
+    my $gamesWon = $scoreboard->{$currentPlayer}->{gamesWon};
+    print colored("\n~~~ Your Score ~~~\n", "yellow");
+    print "$currentPlayer: Games played: $gamesPlayed | Games won: $gamesWon\n";
 }
 
 # Display the start menu
@@ -126,20 +147,37 @@ sub displayMenu {
     print colored("4. Exit\n", "cyan");
 }
 
+# The actual game logic
 sub play {
     print "\n";
-    print "~~~ Welcome to Hangman! ~~~\n";
-    printHangman(0);
+    print colored("~~~ Welcome to Hangman ~~~\n", "magenta");
+
+    # If the current player name is not set (new game), require input
+    # This part will be skipped only when we load a saved game
+    if ($currentPlayer eq "") {
+        print colored("Enter your name:", "bright_yellow") . " ";
+        my $name = <STDIN>;
+        $currentPlayer = $name;
+    }
+
+    printHangman(6 - $attempts);
     print "Guess the word: $secretWord\n";
 
     while ($attempts > 0) {
         print "\n";
         # print "Attempts left: $attempts\n";
         # print "Guessed letters: @guessedLetters\n";
-        print "Enter a letter: ";
+        print colored("Enter a letter: ", "bright_yellow");
         my $guess = <STDIN>;
         # Remove the trailing \n character from the input
         chomp($guess);
+
+        # By entering the "save" keyword in the middle of a game, we save the state and finish the current game
+        if ($guess eq "save") {
+            saveGame("hangman.sav");
+            # last;
+            exit;
+        }
 
         # Check if we already guessed the letter
         my $alreadyGuessedFlag = 0;
@@ -152,12 +190,12 @@ sub play {
         }
 
         if ($alreadyGuessedFlag) {
-            print "You already guessed '$guess'. Try again.\n";
+            print colored("You already guessed '$guess'. Try again.\n", "bright_red");
             next;
         } 
         # =~ operator since we are expecting a regex and matching the pattern
         if (!($guess =~ /^[a-zA-Z]$/ && length($guess) == 1)) {
-            print "Invalid input. Please enter only a single letter. It's not that hard...\n";
+            print colored("Invalid input. Please enter only a single letter. It's not that hard...\n", "bright_red");
             next;
         }
         # Add our guess to the guessed letters array
@@ -170,7 +208,7 @@ sub play {
             printHangman(6 - $attempts);
             print "Attempts left: $attempts\n";
             print "Guessed letters: @guessedLetters\n";
-            print "___________________\n";
+            print "___________________________\n";
             next;
         }
         
@@ -182,16 +220,25 @@ sub play {
                 substr($secretWord, $i, 1) = $guess;
             }
         }
-        print "Good guess! $secretWord\n";
 
         last if $secretWord eq $word;
+
+        # This print is beneath the line above so we don't print out the completed word twice
+        print "Good guess! $secretWord\n";
     }
 
     if ($secretWord eq $word) {
-        print "Woohoo! You guessed the word: $word\n";
+        # Player wins -> congratulate, update scoreboard with win, display score
+        print colored("Bravo! You guessed the word: $word\n", "bright_green");
+        updateScoreboard($currentPlayer, 1);
+        displayScore();
     } else {
-        print "Sorry, you ran out of attempts :( The word was: $word\n";
+        # Player loses, naruzi ga, update scoreboard with loss
+        print colored("Sorry, you ran out of attempts :( The word was: $word\n", "bright_red");
+        updateScoreboard($currentPlayer, 0);
     }
+    # After game end, show the menu again
+    init();
 }
 
 sub restartState {
@@ -226,10 +273,20 @@ sub init {
 
             $word = $customWord;
             restartState($word);
+            # $secretWord = '_' x length($word);
+            # $attempts = 6;
+            # @guessedLetters = ();
+            # $currentPlayer = "";
+
             play();
         } else {
             $word = $words[int(rand(@words))];
             restartState($word);
+            # $secretWord = '_' x length($word);
+            # $attempts = 6;
+            # @guessedLetters = ();
+            # $currentPlayer = "";
+
             play();
         }
     } elsif ($input == 2) {
@@ -240,7 +297,7 @@ sub init {
         init();
     } elsif ($input == 4) {
         print colored("Exiting the game. Goodbye!\n", "cyan");
-        # TODO SAVE SCOREBOARD
+        saveScoreboard("scoreboard.sav");
         exit;
     } else {
         print colored("Invalid choice! Please select 1-4.\n", "red");
@@ -248,4 +305,18 @@ sub init {
     }
 }
 
+# print colored("This is bright blue text\n", 'bright_blue');
+# print colored("This is blue text\n", 'blue');
+# print colored("This is bright cyan text\n", 'bright_cyan');
+# print colored("This is cyan text\n", 'cyan');
+# print colored("This is bright red text\n", 'bright_red');
+# print colored("This is red text\n", 'red');
+# print colored("This is bright yellow text\n", 'bright_yellow');
+# print colored("This is yellow text\n", 'yellow');
+# print colored("This is magenta text\n", 'magenta'); 
+# print colored("This is bright magenta text\n", 'bright_magenta');
+# print colored("This is bright green text\n", 'bright_green');
+# print colored("This is green text\n", 'green'); 
+
+loadScoreboard("scoreboard.sav");
 init();
